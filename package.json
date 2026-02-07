@@ -3,15 +3,40 @@
   "version": "1.0.0",
   "description": "Backend centralizado Stripe para AdmiLogistic (TMS, RoadMaster, Tacógrafo)",
   "main": "server.js",
+  "author": "Mihai - AdmiLogistic",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "stripe": "^14.21.0",
-    "@supabase/supabase-js": "^2.49.1"
+    "stripe": "^14.21.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "keywords": [
+    "stripe",
+    "payment",
+    "api",
+    "admilogistic",
+    "roadmaster",
+    "tacografo",
+    "tms",
+    "transporte"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuusuario/admilogistic-stripe-api.git"
   }
 }

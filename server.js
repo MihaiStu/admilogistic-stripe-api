@@ -10,6 +10,33 @@ const app = express();
 
 /**
  * ─────────────────────────────────────────────
+ * HEALTH CHECK PRIMERO
+ * CRÍTICO: Railway necesita respuesta rápida
+ * ─────────────────────────────────────────────
+ */
+app.get('/health', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'admilogistic-stripe-api',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    env: process.env.NODE_ENV || 'development'
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────
+ * LOGGING MIDDLEWARE (debugging Railway)
+ * ─────────────────────────────────────────────
+ */
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'N/A'}`);
+  next();
+});
+
+/**
+ * ─────────────────────────────────────────────
  * CORS
  * ─────────────────────────────────────────────
  */
@@ -18,6 +45,7 @@ app.use(
     origin: config.server.corsOrigins,
     methods: ['POST', 'GET', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Stripe-Signature'],
+    credentials: true
   })
 );
 
@@ -42,14 +70,85 @@ app.use('/api/stripe', stripeRoutes);
 
 /**
  * ─────────────────────────────────────────────
- * Health check (Railway / monitoring)
+ * ROOT route (info básica)
  * ─────────────────────────────────────────────
  */
-app.get('/health', (_req, res) => {
+app.get('/', (_req, res) => {
   res.status(200).json({
-    status: 'ok',
-    service: 'admilogistic-stripe-api',
-    timestamp: new Date().toISOString(),
+    service: 'AdmiLogistic Stripe API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      checkout: '/api/stripe/checkout',
+      webhook: '/api/stripe/webhook'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────
+ * 404 Handler
+ * ─────────────────────────────────────────────
+ */
+app.use((req, res) => {
+  console.log(`[404] Ruta no encontrada: ${req.method} ${req.path}`);
+  res.status(404).json({
+    error: 'Endpoint no encontrado',
+    path: req.path,
+    availableEndpoints: ['/health', '/api/stripe/checkout', '/api/stripe/webhook']
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────
+ * Error Handler Global
+ * ─────────────────────────────────────────────
+ */
+app.use((err, req, res, next) => {
+  console.error('[ERROR GLOBAL]', err);
+  res.status(err.status || 500).json({
+    error: 'Error interno del servidor',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Error procesando la petición',
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────
+ * Manejadores de errores no capturados
+ * ─────────────────────────────────────────────
+ */
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+  console.error('Stack:', err.stack);
+  // No hacer exit(1) inmediatamente, dejar que Railway maneje el restart
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION] En:', promise);
+  console.error('Razón:', reason);
+});
+
+/**
+ * ─────────────────────────────────────────────
+ * Graceful Shutdown
+ * ─────────────────────────────────────────────
+ */
+process.on('SIGTERM', () => {
+  console.log('[SIGTERM] Señal recibida, cerrando servidor...');
+  server.close(() => {
+    console.log('[SIGTERM] Servidor cerrado correctamente');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('[SIGINT] Señal recibida, cerrando servidor...');
+  server.close(() => {
+    console.log('[SIGINT] Servidor cerrado correctamente');
+    process.exit(0);
   });
 });
 
@@ -62,9 +161,18 @@ app.get('/health', (_req, res) => {
  */
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[STRIPE-API] Servidor escuchando en 0.0.0.0:${PORT}`);
-  console.log(
-    `[STRIPE-API] CORS orígenes: ${config.server.corsOrigins.join(', ')}`
-  );
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log('═══════════════════════════════════════════════════');
+  console.log(`[STRIPE-API] ✅ Servidor LISTO en 0.0.0.0:${PORT}`);
+  console.log(`[STRIPE-API] 🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[STRIPE-API] 🔐 CORS orígenes configurados: ${config.server.corsOrigins.length}`);
+  config.server.corsOrigins.forEach(origin => {
+    console.log(`   - ${origin}`);
+  });
+  console.log(`[STRIPE-API] 🏥 Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`[STRIPE-API] 💳 Stripe Webhook: http://0.0.0.0:${PORT}/api/stripe/webhook`);
+  console.log('═══════════════════════════════════════════════════');
 });
+
+// Exportar para tests (opcional)
+module.exports = app;
