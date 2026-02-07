@@ -123,7 +123,6 @@ app.use((err, req, res, next) => {
 process.on('uncaughtException', (err) => {
   console.error('[UNCAUGHT EXCEPTION]', err);
   console.error('Stack:', err.stack);
-  // No hacer exit(1) inmediatamente, dejar que Railway maneje el restart
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -133,46 +132,53 @@ process.on('unhandledRejection', (reason, promise) => {
 
 /**
  * ─────────────────────────────────────────────
- * Graceful Shutdown
- * ─────────────────────────────────────────────
- */
-process.on('SIGTERM', () => {
-  console.log('[SIGTERM] Señal recibida, cerrando servidor...');
-  server.close(() => {
-    console.log('[SIGTERM] Servidor cerrado correctamente');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('[SIGINT] Señal recibida, cerrando servidor...');
-  server.close(() => {
-    console.log('[SIGINT] Servidor cerrado correctamente');
-    process.exit(0);
-  });
-});
-
-/**
- * ─────────────────────────────────────────────
  * START SERVER (CLAVE PARA RAILWAY)
  * ─────────────────────────────────────────────
  * Railway INYECTA process.env.PORT
  * NUNCA hardcodear puertos
+ * 
+ * DELAY: Railway tiene un bug donde mata el contenedor si arranca
+ * demasiado rápido. Este delay de 3 segundos da tiempo a Railway
+ * para preparar el healthcheck correctamente.
  */
 const PORT = process.env.PORT || 3001;
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log('═══════════════════════════════════════════════════');
-  console.log(`[STRIPE-API] ✅ Servidor LISTO en 0.0.0.0:${PORT}`);
-  console.log(`[STRIPE-API] 🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`[STRIPE-API] 🔐 CORS orígenes configurados: ${config.server.corsOrigins.length}`);
-  config.server.corsOrigins.forEach(origin => {
-    console.log(`   - ${origin}`);
+// Delay de inicio para Railway
+setTimeout(() => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('═══════════════════════════════════════════════════');
+    console.log(`[STRIPE-API] ✅ Servidor LISTO en 0.0.0.0:${PORT}`);
+    console.log(`[STRIPE-API] 🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`[STRIPE-API] 🔐 CORS orígenes configurados: ${config.server.corsOrigins.length}`);
+    config.server.corsOrigins.forEach(origin => {
+      console.log(`   - ${origin}`);
+    });
+    console.log(`[STRIPE-API] 🏥 Health check: http://0.0.0.0:${PORT}/health`);
+    console.log(`[STRIPE-API] 💳 Stripe Webhook: http://0.0.0.0:${PORT}/api/stripe/webhook`);
+    console.log('═══════════════════════════════════════════════════');
   });
-  console.log(`[STRIPE-API] 🏥 Health check: http://0.0.0.0:${PORT}/health`);
-  console.log(`[STRIPE-API] 💳 Stripe Webhook: http://0.0.0.0:${PORT}/api/stripe/webhook`);
-  console.log('═══════════════════════════════════════════════════');
-});
 
-// Exportar para tests (opcional)
-module.exports = app;
+  /**
+   * ─────────────────────────────────────────────
+   * Graceful Shutdown
+   * ─────────────────────────────────────────────
+   */
+  process.on('SIGTERM', () => {
+    console.log('[SIGTERM] Señal recibida, cerrando servidor...');
+    server.close(() => {
+      console.log('[SIGTERM] Servidor cerrado correctamente');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    console.log('[SIGINT] Señal recibida, cerrando servidor...');
+    server.close(() => {
+      console.log('[SIGINT] Servidor cerrado correctamente');
+      process.exit(0);
+    });
+  });
+
+  // Exportar para tests (opcional)
+  module.exports = server;
+}, 3000); // 3 segundos de delay para Railway
