@@ -10,7 +10,7 @@ const app = express();
 app.use(
   cors({
     origin: config.server.corsOrigins,
-    methods: ['POST', 'OPTIONS'],
+    methods: ['POST', 'GET', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
@@ -28,11 +28,19 @@ app.use('/api/stripe', stripeRoutes);
 
 // ── Health check ────────────────────────────────────────
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// ── Start ───────────────────────────────────────────────
-app.listen(config.server.port, () => {
-  console.log(`[STRIPE-API] Servidor escuchando en puerto ${config.server.port}`);
-  console.log(`[STRIPE-API] CORS orígenes: ${config.server.corsOrigins.join(', ')}`);
+// ── Start (CRÍTICO PARA RAILWAY) ────────────────────────
+const PORT = config.server.port || 3001;
+const HOST = '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  console.log(`[STRIPE-API] Servidor escuchando en ${HOST}:${PORT}`);
+  console.log(
+    `[STRIPE-API] CORS orígenes: ${config.server.corsOrigins.join(', ')}`
+  );
 });
