@@ -1,0 +1,17 @@
+{
+  "name": "admilogistic-stripe-api",
+  "version": "1.0.0",
+  "description": "Backend centralizado Stripe para AdmiLogistic (TMS, RoadMaster, Tacógrafo)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "stripe": "^14.21.0",
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}
