@@ -1,45 +1,69 @@
 const express = require('express');
 const cors = require('cors');
+
+// Config y servicios internos
 const config = require('./src/config');
 const rawBodyMiddleware = require('./src/middleware/rawBody');
 const stripeRoutes = require('./src/routes/stripe');
 
 const app = express();
 
-// ── CORS ────────────────────────────────────────────────
+/**
+ * ─────────────────────────────────────────────
+ * CORS
+ * ─────────────────────────────────────────────
+ */
 app.use(
   cors({
     origin: config.server.corsOrigins,
     methods: ['POST', 'GET', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Stripe-Signature'],
   })
 );
 
-// ── Body parsing ────────────────────────────────────────
-// express.json() con verify para capturar rawBody en webhook
+/**
+ * ─────────────────────────────────────────────
+ * Body parsing
+ * IMPORTANTE: rawBody para Stripe Webhooks
+ * ─────────────────────────────────────────────
+ */
 app.use(
   express.json({
     verify: rawBodyMiddleware,
   })
 );
 
-// ── Routes ──────────────────────────────────────────────
+/**
+ * ─────────────────────────────────────────────
+ * Routes
+ * ─────────────────────────────────────────────
+ */
 app.use('/api/stripe', stripeRoutes);
 
-// ── Health check ────────────────────────────────────────
+/**
+ * ─────────────────────────────────────────────
+ * Health check (Railway / monitoring)
+ * ─────────────────────────────────────────────
+ */
 app.get('/health', (_req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
+    service: 'admilogistic-stripe-api',
     timestamp: new Date().toISOString(),
   });
 });
 
-// ── Start (CRÍTICO PARA RAILWAY) ────────────────────────
-const PORT = config.server.port || 3001;
-const HOST = '0.0.0.0';
+/**
+ * ─────────────────────────────────────────────
+ * START SERVER (CLAVE PARA RAILWAY)
+ * ─────────────────────────────────────────────
+ * Railway INYECTA process.env.PORT
+ * NUNCA hardcodear puertos
+ */
+const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, HOST, () => {
-  console.log(`[STRIPE-API] Servidor escuchando en ${HOST}:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[STRIPE-API] Servidor escuchando en 0.0.0.0:${PORT}`);
   console.log(
     `[STRIPE-API] CORS orígenes: ${config.server.corsOrigins.join(', ')}`
   );
