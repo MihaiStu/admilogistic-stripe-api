@@ -81,6 +81,7 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/health',
       checkout: '/api/stripe/checkout',
+      portal: '/api/stripe/portal',
       webhook: '/api/stripe/webhook'
     },
     timestamp: new Date().toISOString()
@@ -97,7 +98,7 @@ app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint no encontrado',
     path: req.path,
-    availableEndpoints: ['/health', '/api/stripe/checkout', '/api/stripe/webhook']
+    availableEndpoints: ['/health', '/api/stripe/checkout', '/api/stripe/portal', '/api/stripe/webhook']
   });
 });
 

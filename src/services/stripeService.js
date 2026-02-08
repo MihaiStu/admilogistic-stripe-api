@@ -275,4 +275,23 @@ async function handleSubscriptionDeleted(subscription) {
   });
 }
 
-module.exports = { createCheckoutSession, changePlan, handleWebhook, stripe };
+// ─────────────────────────────────────────────────────────
+// 4. CUSTOMER PORTAL
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Crea una sesión del Customer Portal de Stripe.
+ * Permite al usuario gestionar su suscripción (cancelar, cambiar método de pago, etc.)
+ *
+ * @param {{ customerId: string, returnUrl: string }}
+ * @returns {{ url: string }}
+ */
+async function createPortalSession({ customerId, returnUrl }) {
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl,
+  });
+  return { url: session.url };
+}
+
+module.exports = { createCheckoutSession, changePlan, handleWebhook, createPortalSession, stripe };

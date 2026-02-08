@@ -3,6 +3,7 @@ const {
   createCheckoutSession,
   changePlan,
   handleWebhook,
+  createPortalSession,
 } = require('../services/stripeService');
 const { getUserAccess } = require('../services/dbService');
 
@@ -63,6 +64,29 @@ router.post('/change-plan', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[CHANGE-PLAN] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────
+// POST /api/stripe/portal
+// Crea una sesión del Customer Portal de Stripe.
+// Body: { customerId, returnUrl }
+// ─────────────────────────────────────────────────────────
+router.post('/portal', async (req, res) => {
+  try {
+    const { customerId, returnUrl } = req.body;
+
+    if (!customerId || !returnUrl) {
+      return res.status(400).json({
+        error: 'Campos requeridos: customerId, returnUrl',
+      });
+    }
+
+    const result = await createPortalSession({ customerId, returnUrl });
+    res.json(result);
+  } catch (err) {
+    console.error('[PORTAL] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
