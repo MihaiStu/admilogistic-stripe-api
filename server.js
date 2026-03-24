@@ -5,6 +5,7 @@ const cors = require('cors');
 const config = require('./src/config');
 const rawBodyMiddleware = require('./src/middleware/rawBody');
 const stripeRoutes = require('./src/routes/stripe');
+const ocrRoutes = require('./src/routes/ocr');
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use(
  * ─────────────────────────────────────────────
  */
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/ocr', ocrRoutes);
 
 /**
  * ─────────────────────────────────────────────
