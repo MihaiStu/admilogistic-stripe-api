@@ -1,8 +1,8 @@
 /**
- * OCR Service — Claude Vision (Anthropic)
+ * OCR Service — Gemini Vision (Google)
  * Extrae datos estructurados de facturas: repostajes, talleres, ingresos, gastos fijos
  */
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 
@@ -49,7 +49,6 @@ function detectarTipoFactura(texto) {
   if (
     t.includes('ingreso') ||
     t.includes('transporte') ||
-    t.includes('albarán') ||
     t.includes('albarán') ||
     t.includes('albaran') ||
     t.includes('porte') ||
@@ -150,13 +149,13 @@ Schema JSON:
   "importe": number,
   "descripcion": "string (breve descripción de la avería o trabajo realizado — máx 120 caracteres)",
   "tipo_mantenimiento": "string (ej: FRENOS, RUEDAS, ACEITE, ITV, EXTINTORES, REPARACION_GENERAL, etc.)",
-  "km": number o null,
+  "km": number,
   "numero_factura": "string o null",
   "confianza": number (0-100)
 }
 
-Para el campo "tipo_mantenimiento" usa SOLO uno de: FRENOS, RUEDAS, NEUMATICOS, ACEITE, FILTROS, ITV, EXTINTORES, TACHO, ELECTRICO, CARROCERIA, REPARACION_GENERAL
-Para "descripcion" extrae el texto del apartado "Descripción de la Avería" o los conceptos principales de los trabajos realizados.
+Para "tipo_mantenimiento" usa SOLO uno de: FRENOS, RUEDAS, NEUMATICOS, ACEITE, FILTROS, ITV, EXTINTORES, TACHO, ELECTRICO, CARROCERIA, REPARACION_GENERAL
+Para "descripcion" extrae el texto del apartado "Descripción de la Avería" o los conceptos principales.
 `.trim(),
 
     INGRESO_TRANSPORTE: `
@@ -170,7 +169,7 @@ Schema JSON:
   "numero_factura": "string",
   "cliente": "string (nombre del cliente)",
   "importe": number (base imponible sin IVA),
-  "importe_iva": number o null,
+  "importe_iva": number,
   "importe_total": number (total con IVA),
   "concepto": "string (descripción del servicio)",
   "matricula": "string o null",
@@ -203,12 +202,13 @@ Schema JSON:
 // Función principal: procesar factura
 // ─────────────────────────────────────────────
 async function procesarFactura(buffer, mimetype, organizacionId) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY no configurada en el servidor');
+    throw new Error('GEMINI_API_KEY no configurada en el servidor');
   }
 
-  const anthropic = new Anthropic({ apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   // 1. Verificar y actualizar límite de uso mensual
   const { data: org, error: orgError } = await supabase
@@ -243,62 +243,35 @@ async function procesarFactura(buffer, mimetype, organizacionId) {
   const limite = LIMITES_OCR[plan] ?? LIMITES_OCR.free;
 
   if (usosActuales >= limite) {
-    const err = Object.assign(
+    throw Object.assign(
       new Error(`Límite de OCR mensual alcanzado: ${usosActuales}/${limite}`),
       { statusCode: 429, usos: usosActuales, limite, plan }
     );
-    throw err;
   }
 
-  // 2. Preparar contenido del archivo
+  // 2. Preparar contenido del archivo para Gemini
   const base64 = buffer.toString('base64');
-  const isPDF = mimetype === 'application/pdf';
-  const mediaType = isPDF ? 'application/pdf' : 'image/jpeg';
-
-  const fileContent = isPDF
-    ? { type: 'document', source: { type: 'base64', media_type: mediaType, data: base64 } }
-    : { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } };
+  const filePart = {
+    inlineData: {
+      data: base64,
+      mimeType: mimetype,
+    },
+  };
 
   // 3. Detección rápida del proveedor/tipo
-  const detectionMsg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 150,
-    messages: [{
-      role: 'user',
-      content: [
-        fileContent,
-        {
-          type: 'text',
-          text: 'En una sola línea corta, dime el nombre del proveedor o emisor de este documento. Solo el nombre, sin explicaciones.',
-        },
-      ],
-    }],
-  });
-
-  const proveedorHint = detectionMsg.content[0]?.text?.trim() ?? '';
+  const detectionResult = await model.generateContent([
+    filePart,
+    'En una sola línea, dime el nombre del proveedor/emisor de este documento. Solo el nombre, nada más.',
+  ]);
+  const proveedorHint = detectionResult.response.text().trim();
   const tipoFactura = detectarTipoFactura(proveedorHint);
 
   console.log(`[OCR] Proveedor detectado: "${proveedorHint}" → tipo: ${tipoFactura}`);
 
   // 4. Extracción completa con prompt específico
   const prompt = buildPromptPorTipo(tipoFactura);
-
-  const extractionMsg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4000,
-    messages: [{
-      role: 'user',
-      content: [
-        fileContent,
-        { type: 'text', text: prompt },
-      ],
-    }],
-  });
-
-  const rawText = extractionMsg.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('');
+  const extractionResult = await model.generateContent([filePart, prompt]);
+  const rawText = extractionResult.response.text();
 
   // 5. Parsear JSON de la respuesta
   let resultado;
@@ -307,7 +280,7 @@ async function procesarFactura(buffer, mimetype, organizacionId) {
     resultado = JSON.parse(clean);
   } catch (parseErr) {
     console.error('[OCR] Error parseando JSON:', rawText);
-    throw new Error('Claude no devolvió JSON válido: ' + rawText.substring(0, 200));
+    throw new Error('Gemini no devolvió JSON válido: ' + rawText.substring(0, 200));
   }
 
   // 6. Incrementar contador de uso
@@ -317,8 +290,9 @@ async function procesarFactura(buffer, mimetype, organizacionId) {
     .eq('id', organizacionId);
 
   // 7. Registrar en log (no crítico)
-  const inputTokens = detectionMsg.usage.input_tokens + extractionMsg.usage.input_tokens;
-  const outputTokens = detectionMsg.usage.output_tokens + extractionMsg.usage.output_tokens;
+  const usageMetadata = extractionResult.response.usageMetadata;
+  const tokensEntrada = usageMetadata?.promptTokenCount ?? 0;
+  const tokensSalida = usageMetadata?.candidatesTokenCount ?? 0;
 
   await supabase.from('ocr_uso_log').insert({
     organizacion_id: organizacionId,
@@ -326,11 +300,11 @@ async function procesarFactura(buffer, mimetype, organizacionId) {
     tipo_factura: resultado.tipo_factura ?? tipoFactura,
     proveedor: resultado.proveedor ?? proveedorHint,
     lineas_extraidas: resultado.lineas?.length ?? 1,
-    tokens_entrada: inputTokens,
-    tokens_salida: outputTokens,
+    tokens_entrada: tokensEntrada,
+    tokens_salida: tokensSalida,
   }).catch(err => console.warn('[OCR] Error guardando log:', err.message));
 
-  console.log(`[OCR] ✅ Procesado: ${tipoFactura} | tokens: ${inputTokens}+${outputTokens} | org: ${organizacionId}`);
+  console.log(`[OCR] ✅ Procesado: ${tipoFactura} | tokens: ${tokensEntrada}+${tokensSalida} | org: ${organizacionId}`);
 
   return resultado;
 }
