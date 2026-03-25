@@ -208,7 +208,10 @@ async function procesarFactura(buffer, mimetype, organizacionId) {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-1.5-flash' },
+    { apiVersion: 'v1' }
+  );
 
   // 1. Verificar y actualizar límite de uso mensual
   const { data: org, error: orgError } = await supabase
